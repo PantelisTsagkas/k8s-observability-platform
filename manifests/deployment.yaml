@@ -26,7 +26,7 @@ spec:
         # :latest is fine for Phase 0; Phase 2 (GitOps) pins sha- tags
         image: ghcr.io/pantelistsagkas/observability-simulator:latest
         ports:
-        - containerPort: 8080
+        - containerPort: 8000
           name: http  # named so probes and the Service can refer to it
           # readiness: "can this pod take traffic right now?"
           # A pod failing readiness is removed from the Service, not killed.
@@ -37,6 +37,7 @@ spec:
             port: http
           initialDelaySeconds: 2
           periodSeconds: 5
+
            # liveness: "is this process beyond saving?"
           # A pod failing liveness gets restarted. Keep it lenient:
           # an aggressive liveness probe turns slowdowns into restart storms.
@@ -46,6 +47,7 @@ spec:
             port: http
           initialDelaySeconds: 10
           periodSeconds: 15
+          
            # requests = what the scheduler reserves for this pod on a node.
           # limits = the hard cap where the container gets throttled (CPU)
           # or killed (memory). The HPA later scales on % of the CPU request.
