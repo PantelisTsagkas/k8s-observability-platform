@@ -1,0 +1,14 @@
+# ConfigMap: loadgen tuning knobs, kept apart from the workload spec.
+# Change the traffic profile by editing this + restarting the loadgen,
+# no image rebuild, no deployment edit.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadgen-config
+  namespace: obs-sim
+data:
+  TARGET_URL: "http://obs-sim:8000"   # the Service DNS name you just tested
+  RPS: "2"
+  ERROR_RATE: "0.2"
+  SLOW_RATE: "0.1"
+  CONCURRENCY: "5"

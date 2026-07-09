@@ -1,0 +1,39 @@
+# Deployment for the load generator. One replica is enough: its whole
+# job is to send a steady trickle of mixed traffic at the app so
+# metrics and dashboards have something to show.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+  namespace: obs-sim
+  labels:
+    app: loadgen
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadgen
+  template:
+    metadata:
+      labels:
+        app: loadgen
+    spec:
+      containers:
+        - name: loadgen
+          image: ghcr.io/pantelistsagkas/obs-loadgen:latest
+          # envFrom: every key in the ConfigMap becomes an env var,
+          # exactly the names pydantic-settings expects
+          envFrom:
+            - configMapRef:
+                name: loadgen-config
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
