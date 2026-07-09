@@ -135,14 +135,11 @@ aws eks list-clusters
 
 ## Current status
 
-Phase 0 in progress (started 2026-07-09).
+Phase 0 complete (2026-07-09). All six manifests working on k3d: app
+reachable via Ingress at localhost:8080, loadgen driving mixed traffic,
+HPA verified scaling 2 -> 5 replicas under load (screenshot in docs/).
+Both images multi-arch on GHCR, built by CI in their respective repos.
 
-Done:
-- Tools installed: k3d 5.9, helm 4.2, k9s 0.51, kubectl, docker.
-- App repo (observability-simulator): GHCR build workflow added, Dockerfile
-  hardened to run as non-root (uid 1001). Image: ghcr.io/pantelistsagkas/observability-simulator
-  with tags `latest` and `sha-<commit>`.
-
-Next: write the loadgen service, then hand-write the Phase 0 manifests one
-at a time with explanations. After the first GHCR publish, set the package
-visibility to public so the cluster can pull without registry credentials.
+Next: Phase 1. Build charts/obs-sim on a branch and merge via PR
+(deliberate choice to practice the PR flow), then kube-prometheus-stack
+and Loki via Helm.
