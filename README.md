@@ -77,6 +77,11 @@ kubectl get hpa -n obs-sim -w
 
 ![HPA scaling from 2 to 5 replicas under load](docs/phase-0-hpa-scaling.png)
 
+Scale-down is deliberately slower (a ~5 minute stabilization window prevents
+flapping): load drops at 11m, replicas step 5 -> 4 -> 2 around 15m.
+
+![HPA scaling back down after load drops](docs/phase-0-hpa-scaledown.png)
+
 Teardown: `k3d cluster delete obs-platform`.
 
 ## Layout
