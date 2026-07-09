@@ -1,0 +1,10 @@
+# Namespace: isolates everything belonging to the obs-sim stack.
+
+# Deleting this namespace deletes the whole deployment in one command.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: obs-sim
+
+  
