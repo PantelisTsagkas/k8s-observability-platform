@@ -1,0 +1,13 @@
+# Local Claude Code permission settings, machine-specific
+.claude/settings.local.json
+
+# Never commit cluster credentials or Terraform state (see CLAUDE.md)
+kubeconfig*
+*.tfstate
+*.tfstate.*
+.terraform/
+
+# Python
+__pycache__/
+.venv/
+.pytest_cache/
