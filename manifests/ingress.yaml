@@ -1,0 +1,21 @@
+# Ingress: routes external HTTP traffic to the obs-sim Service.
+# Inert on its own; Traefik (k3s's bundled ingress controller) reads
+# this and programs the route. localhost:8080 reaches Traefik via the
+# port mapping set at k3d cluster create (8080:80@loadbalancer).
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: obs-sim
+  namespace: obs-sim
+spec:
+  ingressClassName: traefik   # which controller should honor this resource
+  rules:
+    - http:                   # no host: field = match any hostname
+        paths:
+          - path: /
+            pathType: Prefix  # "/" as Prefix = catch everything
+            backend:
+              service:
+                name: obs-sim
+                port:
+                  name: http  # the named Service port again
