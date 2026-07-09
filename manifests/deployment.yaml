@@ -1,0 +1,63 @@
+# Deployment: declares the desired state for the obs-sim app pods.
+# You never create pods directly; the Deployment creates a ReplicaSet,
+# which creates the pods and replaces them if they die or a node goes away.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata: 
+  name: obs-sim
+  namespace: obs-sim
+  labels:
+    app: obs-sim
+
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: obs-sim
+
+  template:
+    metadata:
+      labels:
+        app: obs-sim
+    spec:
+      containers:
+      - name: obs-sim
+        # :latest is fine for Phase 0; Phase 2 (GitOps) pins sha- tags
+        image: ghcr.io/pantelistsagkas/observability-simulator:latest
+        ports:
+        - containerPort: 8080
+          name: http  # named so probes and the Service can refer to it
+          # readiness: "can this pod take traffic right now?"
+          # A pod failing readiness is removed from the Service, not killed.
+          
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 2
+          periodSeconds: 5
+           # liveness: "is this process beyond saving?"
+          # A pod failing liveness gets restarted. Keep it lenient:
+          # an aggressive liveness probe turns slowdowns into restart storms.
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 15
+           # requests = what the scheduler reserves for this pod on a node.
+          # limits = the hard cap where the container gets throttled (CPU)
+          # or killed (memory). The HPA later scales on % of the CPU request.
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          

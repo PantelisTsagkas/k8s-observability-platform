@@ -25,6 +25,6 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # Non-root, same reasoning as the backend: runAsNonRoot-compatible
 RUN useradd --system --uid 1001 --no-create-home appuser
-USER appuser
+USER 1001
 
 CMD ["python", "-m", "loadgen"]
