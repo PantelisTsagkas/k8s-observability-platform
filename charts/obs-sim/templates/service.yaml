@@ -1,0 +1,15 @@
+# Service: stable DNS name + virtual IP for the obs-sim pods.
+# Pods come and go; the Service tracks whichever ready pods match
+# the selector and load-balances across them.
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: obs-sim
+spec:
+  selector:
+    app: obs-sim        # same label query the Deployment uses
+  ports:
+    - name: http
+      port: 8000        # the port the Service listens on
+      targetPort: http  # the *named* containerPort on the pods

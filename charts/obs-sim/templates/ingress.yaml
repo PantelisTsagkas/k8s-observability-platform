@@ -1,0 +1,23 @@
+{{- if .Values.ingress.enabled }}
+# Ingress: routes external HTTP traffic to the obs-sim Service.
+# Inert on its own; an ingress controller (Traefik on k3d, ALB on EKS)
+# reads this and programs the route. localhost:8080 reaches Traefik via
+# the port mapping set at k3d cluster create (8080:80@loadbalancer).
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: obs-sim
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - http:                   # no host: field = match any hostname
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: obs-sim
+                port:
+                  name: http  # the named Service port again
+{{- end }}

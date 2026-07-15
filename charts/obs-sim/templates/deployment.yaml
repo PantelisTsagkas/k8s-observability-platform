@@ -10,7 +10,7 @@ metadata:
     app: obs-sim
 spec:
   # The HPA owns the replica count when it is enabled. Templating replicas
-  # here would make every `helm upgrade` reset it to t
+  # here would make every `helm upgrade` reset it to the values.yaml number,
   # fighting the HPA until it scales back up again.
   {{- if not .Values.hpa.enabled }}
   replicas: {{ .Values.app.replicas }}
@@ -26,11 +26,11 @@ spec:
       containers:
         - name: obs-sim
           image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
-          imagePullPolicy: {{ .Values.app.image.pullPo
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
           ports:
             - containerPort: 8000
               name: http  # named so probes and the Service can refer to it
-          # readiness: "can this pod take traffic righ
+          # readiness: "can this pod take traffic right now?"
           # A pod failing readiness is removed from the Service, not killed.
           readinessProbe:
             httpGet:
@@ -40,7 +40,7 @@ spec:
             periodSeconds: 5
           # liveness: "is this process beyond saving?"
           # A pod failing liveness gets restarted. Keep it lenient:
-          # an aggressive liveness probe turns slowdow
+          # an aggressive liveness probe turns slowdowns into restart storms.
           livenessProbe:
             httpGet:
               path: /health
@@ -48,7 +48,7 @@ spec:
             initialDelaySeconds: 10
             periodSeconds: 15
           # requests = what the scheduler reserves for this pod on a node.
-          # limits = the hard cap where the container
+          # limits = the hard cap where the container gets throttled (CPU)
           # or killed (memory). The HPA scales on % of the CPU request.
           resources:
             {{- toYaml .Values.app.resources | nindent 12 }}

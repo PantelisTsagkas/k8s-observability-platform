@@ -7,8 +7,8 @@ app:
   image:
     repository: ghcr.io/pantelistsagkas/observability-simulator
     tag: latest              # Phase 2 pins sha- tags here via CI
-    pullPolicy: IfNotPresent
-  replicas: 2                # only used when hpa.enabled is false (see below)
+    pullPolicy: Always       # :latest must re-pull; Phase 2 pins sha- tags -> IfNotPresent
+  replicas: 2             # only used when hpa.enabled is false (see below)
   resources:
     requests:
       cpu: 50m               # HPA measures utilization against this
@@ -21,7 +21,7 @@ loadgen:
   image:
     repository: ghcr.io/pantelistsagkas/obs-loadgen
     tag: latest
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   resources:
     requests:
       cpu: 25m
