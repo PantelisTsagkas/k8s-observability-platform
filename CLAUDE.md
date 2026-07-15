@@ -135,11 +135,19 @@ aws eks list-clusters
 
 ## Current status
 
-Phase 0 complete (2026-07-09). All six manifests working on k3d: app
-reachable via Ingress at localhost:8080, loadgen driving mixed traffic,
-HPA verified scaling 2 -> 5 replicas under load (screenshot in docs/).
-Both images multi-arch on GHCR, built by CI in their respective repos.
+Phase 1 in progress (2026-07-15): charts/obs-sim written and deployed.
+`helm install obs-sim ./charts/obs-sim -n obs-sim --create-namespace`
+brings up the same six objects Phase 0 did. Hand-written from the
+manifests rather than `helm create`, so every line is explained. Parity
+was proven with `kubectl diff` of the rendered chart against the live
+Phase 0 objects before cutover: four of six showed no diff, and both
+differences were real findings (imagePullPolicy defaulting, absent
+replicas). manifests/ is superseded but kept as a learning artifact.
 
-Next: Phase 1. Build charts/obs-sim on a branch and merge via PR
-(deliberate choice to practice the PR flow), then kube-prometheus-stack
-and Loki via Helm.
+Phase 0 complete (2026-07-09): raw manifests on k3d, app via Ingress at
+localhost:8080, HPA verified 2 -> 5 replicas under load (screenshots in
+docs/). Both images multi-arch on GHCR, built by CI in their own repos.
+
+Next: still Phase 1. kube-prometheus-stack via Helm with a ServiceMonitor
+scraping the app, then Loki (check whether Promtail or Alloy is current
+at time of work). Neither started.
