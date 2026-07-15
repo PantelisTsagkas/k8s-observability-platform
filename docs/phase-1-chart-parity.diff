@@ -1,0 +1,60 @@
+diff -u -N /var/folders/1k/g7ftndg96md5nf3w8n9q8db00000gn/T/LIVE-1887311295/apps.v1.Deployment.obs-sim.loadgen /var/folders/1k/g7ftndg96md5nf3w8n9q8db00000gn/T/MERGED-816050720/apps.v1.Deployment.obs-sim.loadgen
+--- /var/folders/1k/g7ftndg96md5nf3w8n9q8db00000gn/T/LIVE-1887311295/apps.v1.Deployment.obs-sim.loadgen	2026-07-15 14:13:38
++++ /var/folders/1k/g7ftndg96md5nf3w8n9q8db00000gn/T/MERGED-816050720/apps.v1.Deployment.obs-sim.loadgen	2026-07-15 14:13:38
+@@ -6,7 +6,7 @@
+     kubectl.kubernetes.io/last-applied-configuration: |
+       {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"labels":{"app":"loadgen"},"name":"loadgen","namespace":"obs-sim"},"spec":{"replicas":1,"selector":{"matchLabels":{"app":"loadgen"}},"template":{"metadata":{"labels":{"app":"loadgen"}},"spec":{"containers":[{"envFrom":[{"configMapRef":{"name":"loadgen-config"}}],"image":"ghcr.io/pantelistsagkas/obs-loadgen:latest","name":"loadgen","resources":{"limits":{"cpu":"200m","memory":"128Mi"},"requests":{"cpu":"25m","memory":"32Mi"}},"securityContext":{"allowPrivilegeEscalation":false,"runAsNonRoot":true,"runAsUser":1001}}]}}}}
+   creationTimestamp: "2026-07-09T11:11:15Z"
+-  generation: 1
++  generation: 2
+   labels:
+     app: loadgen
+   name: loadgen
+@@ -27,6 +27,8 @@
+     type: RollingUpdate
+   template:
+     metadata:
++      annotations:
++        checksum/config: f80b2ac89d80eee92a3025b4265a748b1577626fb606c4736eff42eeb5cfd769
+       labels:
+         app: loadgen
+     spec:
+@@ -35,7 +37,7 @@
+         - configMapRef:
+             name: loadgen-config
+         image: ghcr.io/pantelistsagkas/obs-loadgen:latest
+-        imagePullPolicy: Always
++        imagePullPolicy: IfNotPresent
+         name: loadgen
+         resources:
+           limits:
+diff -u -N /var/folders/1k/g7ftndg96md5nf3w8n9q8db00000gn/T/LIVE-1887311295/apps.v1.Deployment.obs-sim.obs-sim /var/folders/1k/g7ftndg96md5nf3w8n9q8db00000gn/T/MERGED-816050720/apps.v1.Deployment.obs-sim.obs-sim
+--- /var/folders/1k/g7ftndg96md5nf3w8n9q8db00000gn/T/LIVE-1887311295/apps.v1.Deployment.obs-sim.obs-sim	2026-07-15 14:13:38
++++ /var/folders/1k/g7ftndg96md5nf3w8n9q8db00000gn/T/MERGED-816050720/apps.v1.Deployment.obs-sim.obs-sim	2026-07-15 14:13:38
+@@ -6,7 +6,7 @@
+     kubectl.kubernetes.io/last-applied-configuration: |
+       {"apiVersion":"apps/v1","kind":"Deployment","metadata":{"annotations":{},"labels":{"app":"obs-sim"},"name":"obs-sim","namespace":"obs-sim"},"spec":{"replicas":2,"selector":{"matchLabels":{"app":"obs-sim"}},"template":{"metadata":{"labels":{"app":"obs-sim"}},"spec":{"containers":[{"image":"ghcr.io/pantelistsagkas/observability-simulator:latest","livenessProbe":{"httpGet":{"path":"/health","port":"http"},"initialDelaySeconds":10,"periodSeconds":15},"name":"obs-sim","ports":[{"containerPort":8000,"name":"http"}],"readinessProbe":{"httpGet":{"path":"/health","port":"http"},"initialDelaySeconds":2,"periodSeconds":5},"resources":{"limits":{"cpu":"500m","memory":"256Mi"},"requests":{"cpu":"50m","memory":"64Mi"}},"securityContext":{"allowPrivilegeEscalation":false,"runAsNonRoot":true,"runAsUser":1001}}]}}}}
+   creationTimestamp: "2026-07-09T11:11:15Z"
+-  generation: 1
++  generation: 2
+   labels:
+     app: obs-sim
+   name: obs-sim
+@@ -15,7 +15,7 @@
+   uid: 0782b99b-4921-4169-be8b-d1d3d6d3322c
+ spec:
+   progressDeadlineSeconds: 600
+-  replicas: 2
++  replicas: 1
+   revisionHistoryLimit: 10
+   selector:
+     matchLabels:
+@@ -32,7 +32,7 @@
+     spec:
+       containers:
+       - image: ghcr.io/pantelistsagkas/observability-simulator:latest
+-        imagePullPolicy: Always
++        imagePullPolicy: IfNotPresent
+         livenessProbe:
+           failureThreshold: 3
+           httpGet:
