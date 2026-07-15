@@ -120,6 +120,13 @@ they are properties of the app rather than deployment choices.
 `manifests/` is no longer applied. It stays as a reference for what the
 chart renders down to.
 
+CI lints and renders the chart on every PR that touches it, including the
+`hpa.enabled=false` and `ingress.enabled=false` paths that default values
+never exercise. It also asserts the invariant the chart exists to protect:
+with the HPA enabled, the obs-sim Deployment must not render a `replicas`
+field, or `helm upgrade` would reset the count and fight the autoscaler.
+That failure is silent in a cluster, so it is caught before merge instead.
+
 ## Lessons that cost debugging time (Phase 0)
 
 - `runAsNonRoot: true` needs a *numeric* `USER` in the Dockerfile; the kubelet
