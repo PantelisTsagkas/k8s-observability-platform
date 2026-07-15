@@ -1,0 +1,58 @@
+# Deployment: declares the desired state for the obs-sim app pods.
+# You never create pods directly; the Deployment creates a ReplicaSet,
+# which creates the pods and replaces them if they die or a node goes away.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: obs-sim
+  labels:
+    app: obs-sim
+spec:
+  # The HPA owns the replica count when it is enabled. Templating replicas
+  # here would make every `helm upgrade` reset it to t
+  # fighting the HPA until it scales back up again.
+  {{- if not .Values.hpa.enabled }}
+  replicas: {{ .Values.app.replicas }}
+  {{- end }}
+  selector:
+    matchLabels:
+      app: obs-sim
+  template:
+    metadata:
+      labels:
+        app: obs-sim
+    spec:
+      containers:
+        - name: obs-sim
+          image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
+          imagePullPolicy: {{ .Values.app.image.pullPo
+          ports:
+            - containerPort: 8000
+              name: http  # named so probes and the Service can refer to it
+          # readiness: "can this pod take traffic righ
+          # A pod failing readiness is removed from the Service, not killed.
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          # liveness: "is this process beyond saving?"
+          # A pod failing liveness gets restarted. Keep it lenient:
+          # an aggressive liveness probe turns slowdow
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          # requests = what the scheduler reserves for this pod on a node.
+          # limits = the hard cap where the container
+          # or killed (memory). The HPA scales on % of the CPU request.
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false

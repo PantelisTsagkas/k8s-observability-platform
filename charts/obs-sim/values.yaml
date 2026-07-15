@@ -1,0 +1,50 @@
+# values.yaml: the chart's public API.
+# Rule applied: expose what differs between environments (k3d now, EKS in
+# Phase 3). Hardcode what is a property of the app itself (ports, probe
+# paths, securityContext) - those are the same everywhere.
+
+app:
+  image:
+    repository: ghcr.io/pantelistsagkas/observability-simulator
+    tag: latest              # Phase 2 pins sha- tags here via CI
+    pullPolicy: IfNotPresent
+  replicas: 2                # only used when hpa.enabled is false (see below)
+  resources:
+    requests:
+      cpu: 50m               # HPA measures utilization against this
+      memory: 64Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+loadgen:
+  image:
+    repository: ghcr.io/pantelistsagkas/obs-loadgen
+    tag: latest
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 25m
+      memory: 32Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+  # Traffic profile. Becomes the ConfigMap, read as env vars at pod start.
+  config:
+    TARGET_URL: "http://obs-sim:8000"
+    RPS: "2"
+    ERROR_RATE: "0.2"
+    SLOW_RATE: "0.1"
+    CONCURRENCY: "5"
+
+ingress:
+  enabled: true
+  className: traefik         # k3d/k3s. Phase 3 on EKS flips this to alb.
+  path: /
+  pathType: Prefix
+
+hpa:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70

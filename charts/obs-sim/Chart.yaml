@@ -1,0 +1,9 @@
+# Chart metadata. This file is what makes a directory a Helm chart.
+
+apiVersion: v2          # v2 = Helm 3 chart format (v1 was Helm 2, long dead)
+name: obs-sim
+description: observability-simulator plus its load generator
+type: application       # "application" = deployable. "library" = reusable helpers only.
+
+version: 0.1.0          # version of THIS CHART. Bump when templates change.
+appVersion: "latest"    # version of the APP inside. Informational only.
