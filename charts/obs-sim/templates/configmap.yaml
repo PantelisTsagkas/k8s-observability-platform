@@ -1,0 +1,15 @@
+# ConfigMap: loadgen tuning knobs, kept apart from the workload spec.
+# The traffic profile now lives in values.yaml (loadgen.config), so it is
+# a chart input rather than a manifest edit.
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadgen-config
+data:
+  # range + quote, not toYaml: ConfigMap data values must be strings, and
+  # `RPS: 2` unquoted in values.yaml would render an int and be rejected.
+  # quote makes the chart correct regardless of how values.yaml is written.
+  {{- range $key, $value := .Values.loadgen.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

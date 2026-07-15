@@ -1,0 +1,24 @@
+{{- if .Values.hpa.enabled }}
+# HPA: holds average CPU across obs-sim pods at a % of the CPU request,
+# scaling between min and max. Requires metrics-server (bundled with k3s).
+# Utilization is relative to resources.requests.cpu.
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: obs-sim
+spec:
+  scaleTargetRef:            # which object's replica count to manage
+    apiVersion: apps/v1
+    kind: Deployment
+    name: obs-sim
+  minReplicas: {{ .Values.hpa.minReplicas }}
+  maxReplicas: {{ .Values.hpa.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.hpa.targetCPUUtilizationPercentage }}
+{{- end }}

@@ -1,0 +1,42 @@
+# Deployment for the load generator. One replica is enough: its whole
+# job is to send a steady trickle of mixed traffic at the app so
+# metrics and dashboards have something to show.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadgen
+  labels:
+    app: loadgen
+spec:
+  replicas: 1     # hardcoded: never scaled, not an environment difference
+  selector:
+    matchLabels:
+      app: loadgen
+  template:
+    metadata:
+      labels:
+        app: loadgen
+      annotations:
+        # Hash of the rendered ConfigMap. Change the traffic profile and
+        # this hash changes -> the pod template changes -> helm upgrade
+        # rolls the pods automatically. Fixes the Phase 0 papercut where
+        # env vars are read at start and a ConfigMap edit did nothing
+        # until a manual `kubectl rollout restart`.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: loadgen
+          image: "{{ .Values.loadgen.image.repository }}:{{ .Values.loadgen.image.tag }}"
+          imagePullPolicy: {{ .Values.loadgen.image.pullPolicy }}
+          # envFrom: every key in the ConfigMap becomes an env var,
+          # exactly the names pydantic-settings expects
+          envFrom:
+            - configMapRef:
+                name: loadgen-config
+          resources:
+            {{- toYaml .Values.loadgen.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            allowPrivilegeEscalation: false
