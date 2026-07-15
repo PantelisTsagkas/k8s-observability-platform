@@ -1,0 +1,83 @@
+# Validates the Helm chart on every PR that touches it. The chart is the
+# deployment contract: Phase 2 puts ArgoCD in front of it, auto-syncing
+# whatever lands on main, so a chart that does not render must never get
+# that far. Cheap to run, and catches the render-time bugs that only
+# appear once values are substituted.
+name: lint-chart
+
+on:
+  pull_request:
+    paths:
+      - "charts/**"
+      - ".github/workflows/lint-chart.yml"
+  push:
+    branches: [main]
+    paths:
+      - "charts/**"
+      - ".github/workflows/lint-chart.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+
+      # helm lint renders the templates, so it catches the class of bugs
+      # that only exist after substitution: an unclosed {{, a bad nindent,
+      # a value referenced but never defined.
+      - name: Lint with default values
+        run: helm lint charts/obs-sim
+
+      # Default values never render the hpa.enabled=false branch, so
+      # nothing else would ever exercise it. That branch decides whether
+      # replicas is set at all, which makes it the least-tested and
+      # highest-consequence path in the chart.
+      - name: Lint with the HPA disabled
+        run: helm lint charts/obs-sim --set hpa.enabled=false
+
+      # Render every optional-resource combination. lint checks one set of
+      # values; these prove the {{- if }} wrappers produce valid YAML in
+      # both states rather than just the default one.
+      - name: Render, default values
+        run: helm template obs-sim charts/obs-sim
+
+      - name: Render, HPA and ingress disabled
+        run: |
+          helm template obs-sim charts/obs-sim \
+            --set hpa.enabled=false \
+            --set ingress.enabled=false
+
+      # The invariant the conditional exists to protect: while the HPA is
+      # enabled, the obs-sim Deployment must not carry a replicas field.
+      # If it does, every helm upgrade resets the count and fights the
+      # autoscaler back down. Nothing about that failure is loud, so it
+      # gets asserted here rather than discovered in a cluster.
+      - name: Assert the HPA owns the replica count
+        run: |
+          rendered=$(helm template obs-sim charts/obs-sim \
+            | yq 'select(.kind == "Deployment" and .metadata.name == "obs-sim") | .spec.replicas')
+          if [ "$rendered" != "null" ]; then
+            echo "FAIL: obs-sim Deployment rendered 'replicas: $rendered' while hpa.enabled is true."
+            echo "That field must be absent so the HPA owns the count."
+            exit 1
+          fi
+          echo "OK: obs-sim Deployment has no replicas field; the HPA owns it."
+
+      # The mirror of the above: with the HPA off, something has to set the
+      # count, so the field must come back.
+      - name: Assert replicas returns when the HPA is disabled
+        run: |
+          rendered=$(helm template obs-sim charts/obs-sim --set hpa.enabled=false \
+            | yq 'select(.kind == "Deployment" and .metadata.name == "obs-sim") | .spec.replicas')
+          if [ "$rendered" = "null" ]; then
+            echo "FAIL: hpa.enabled is false and no replicas field was rendered."
+            echo "The Deployment would default to 1 with nothing managing it."
+            exit 1
+          fi
+          echo "OK: obs-sim Deployment renders replicas: $rendered with the HPA off."
