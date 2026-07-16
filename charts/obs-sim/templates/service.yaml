@@ -6,9 +6,11 @@ apiVersion: v1
 kind: Service
 metadata:
   name: obs-sim
+  labels:
+    app: obs-sim
 spec:
   selector:
-    app: obs-sim        # same label query the Deployment uses
+    app: obs-sim
   ports:
     - name: http
       port: 8000        # the port the Service listens on

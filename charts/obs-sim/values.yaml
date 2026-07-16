@@ -48,3 +48,14 @@ hpa:
   minReplicas: 2
   maxReplicas: 6
   targetCPUUtilizationPercentage: 70
+
+# Prometheus Operator integration (Phase 1).
+# A ServiceMonitor is a CRD, so it only exists if the operator is installed.
+# Gate it behind a flag so the chart still installs on a bare cluster.
+
+serviceMonitor:
+  enabled: true
+  releaseLabel: kube-prometheus-stack   # MUST equal the stack's Helm release
+                                        # name, or Prometheus ignores us.
+  interval: 30s
+  path: /metrics

@@ -1,0 +1,23 @@
+{{- if .Values.serviceMonitor.enabled }}
+# ServiceMonitor: tells the Prometheus Operator to scrape obs-sim.
+# The operator watches these and rewrites Prometheus' scrape config for us,
+# so we never touch prometheus.yml by hand. This is the "operator way".
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: obs-sim
+  labels:
+    release: {{ .Values.serviceMonitor.releaseLabel }}   # the badge Prometheus requires
+spec:
+  selector:
+    matchLabels:
+      app: obs-sim          # selects the *Service* by its metadata label (edit #1)
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: http            # the Service *port name*, not a number, not the containerPort
+      path: {{ .Values.serviceMonitor.path }}
+      interval: {{ .Values.serviceMonitor.interval }}
+{{- end }}
