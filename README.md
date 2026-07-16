@@ -1,7 +1,8 @@
 # k8s-observability-platform
 
-**Status: ACTIVE** - Phase 1 in progress: the Helm chart is done, the
-monitoring stack (kube-prometheus-stack + Loki) is next.
+**Status: ACTIVE** - Phase 1 done: Helm chart, kube-prometheus-stack, and
+Loki + Alloy are installed. Grafana shows app metrics and logs, correlated
+on one time axis. Phase 2 (ArgoCD) is next.
 
 Runs [observability-simulator](https://github.com/PantelisTsagkas/observability-simulator)
 (an instrumented FastAPI app) on Kubernetes: first locally on k3d with
@@ -18,7 +19,7 @@ multi-service traffic worth observing.
 | Phase | Goal | Status |
 |-------|------|--------|
 | 0 | Raw manifests on k3d: Deployment, Service, ConfigMap, Ingress, HPA | Done |
-| 1 | Helm chart + kube-prometheus-stack + Loki | Chart done, stack next |
+| 1 | Helm chart + kube-prometheus-stack + Loki/Alloy | Done |
 | 2 | GitOps with ArgoCD, commit-to-deployed | Not started |
 | 3 | EKS with Terraform, deploy the same charts, destroy same day | Not started |
 
@@ -86,11 +87,13 @@ pods roll on their own. Under Phase 0 this was a manual step, and
 forgetting it made config edits look broken.
 
 ![HPA scaling from 2 to 5 replicas under load](docs/phase-0-hpa-scaling.png)
+*Phase 0: the HPA scales obs-sim from 2 to 5 replicas as load ramps, measuring CPU against the 70% target.*
 
 Scale-down is deliberately slower (a ~5 minute stabilization window prevents
 flapping): load drops at 11m, replicas step 5 -> 4 -> 2 around 15m.
 
 ![HPA scaling back down after load drops](docs/phase-0-hpa-scaledown.png)
+*Phase 0: scale-down respects the ~5 minute stabilization window, stepping 5 -> 4 -> 2 rather than dropping all at once.*
 
 Teardown: `k3d cluster delete obs-platform`.
 
@@ -101,6 +104,8 @@ apps/loadgen/     # load generator (Python, uv, tested with pytest)
 charts/obs-sim/   # Phase 1: the Helm chart deployments run from
 manifests/        # Phase 0: hand-written YAML, superseded by the chart,
                   # kept as the artifact it was derived from
+monitoring/       # Phase 1: values files for the observability stack
+                  # (Loki, Alloy, the Grafana Loki datasource)
 docs/             # screenshots, decisions, EKS writeup (Phase 3)
 ```
 
@@ -119,6 +124,44 @@ they are properties of the app rather than deployment choices.
 
 `manifests/` is no longer applied. It stays as a reference for what the
 chart renders down to.
+
+## Observability stack (Phase 1)
+
+Installed with Helm into a separate `monitoring` namespace, values files
+checked in under `monitoring/` so the stack is reproducible from the repo:
+
+- **kube-prometheus-stack**: Prometheus Operator, Prometheus, Alertmanager,
+  Grafana, node-exporter, kube-state-metrics.
+- **Loki** in single-binary, filesystem-backed mode
+  (`monitoring/loki-values.yaml`). Deliberately small: production Loki uses
+  object storage and a scaled read/write/backend split.
+- **Grafana Alloy** as a DaemonSet log collector
+  (`monitoring/alloy-values.yaml`). Alloy is Grafana's OpenTelemetry
+  Collector distribution and the replacement for Promtail, which reached
+  end-of-life in March 2026.
+
+Metrics reach Prometheus through a `ServiceMonitor` shipped in the chart
+(`charts/obs-sim/templates/servicemonitor.yaml`): a declarative CRD the
+Prometheus Operator watches and compiles into scrape config, so pods that
+come and go, or scale under the HPA, are picked up with no config edits.
+Logs reach Loki through Alloy, which discovers each node's pods and promotes
+a small, low-cardinality label set (`namespace`, `pod`, `container`, `app`)
+before shipping the lines. Loki is wired into Grafana as a datasource by a
+sidecar-provisioned ConfigMap (`monitoring/loki-datasource.yaml`).
+
+![Grafana Explore showing request rate, error ratio, and p95 latency from PromQL](docs/phase-1-golden-signals.png)
+*The three golden signals, each built from `rate()` of the app's counters: request rate, error ratio, and p95 latency. The error ratio reads ~0.12 rather than the loadgen's configured 0.20, because `/health` probe traffic pads the denominator with guaranteed 200s (see Lessons).*
+
+![Structured JSON logs in Loki, keyed by Alloy-promoted labels](docs/phase-1-loki-logs.png)
+*Structured logs in Loki, queryable by the low-cardinality labels Alloy promotes (`app`, `namespace`, `pod`, `container`, `cluster`). An intentional `ERROR` from `/simulate/error` sits next to a routine `/health` `INFO` line: HTTP status and log level are different axes.*
+
+The payoff is correlation. An error-rate spike in Prometheus
+(`sum(rate(http_errors_total[1m]))`) lines up, on a shared time axis, with
+the actual `500` log lines from `/simulate/error` in Loki. Metrics say what
+and when; logs say why.
+
+![Metrics and logs correlated on one time axis in Grafana Explore](docs/phase-1-correlation.png)
+*The whole point of the stack: an `http_errors_total` rate spike (right) aligns with the `500` log lines from `/simulate/error` (left), same time window, one pane.*
 
 CI lints and renders the chart on every PR that touches it, including the
 `hpa.enabled=false` and `ingress.enabled=false` paths that default values
@@ -168,3 +211,26 @@ That failure is silent in a cluster, so it is caught before merge instead.
   came back with no diff, and the two that differed were both real
   findings. Cheaper and more convincing than reading `helm template`
   output, because it compares against reality rather than intent.
+- "app: obs-sim" means three different things, and confusing them silently
+  breaks scraping. `Service.spec.selector` selects Pods; a `ServiceMonitor`
+  selects Services by their *metadata* labels (not the pod selector, so the
+  Service needs its own `app` metadata label); and Prometheus only adopts
+  ServiceMonitors that carry the operator's `release:` label. Miss any link
+  and the target never appears, with no error anywhere. The Prometheus
+  Targets page is the first place to look.
+- Prometheus scrapes each pod endpoint individually, not the Service VIP.
+  That is what makes per-pod metrics correct and lets HPA scaling show up as
+  new targets automatically.
+- An error-rate ratio is only as honest as its denominator. Kubernetes
+  `/health` probe traffic (a steady stream of guaranteed 200s) diluted the
+  measured error fraction from the configured 0.2 down to ~0.12. Scoping the
+  denominator with `{exported_endpoint!="/health"}` recovered the real
+  figure. Production SLOs hide behind health-check and probe traffic the
+  same way.
+- The Loki Helm chart's `deploymentMode` enum is `SingleBinary`; the docs
+  site said `Monolithic`. Helm silently ignored the invalid value, kept the
+  scaled default, and installed nothing but a gateway. `helm show values
+  <chart>` is the source of truth, not the docs site.
+- Loki indexes labels, not log bodies. Keep labels few and low-cardinality
+  (never `request_id` or similar): each unique combination is a separate
+  stream. Narrow by label first, then grep the body with `|=`.

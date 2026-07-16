@@ -135,19 +135,32 @@ aws eks list-clusters
 
 ## Current status
 
-Phase 1 in progress (2026-07-15): charts/obs-sim written and deployed.
-`helm install obs-sim ./charts/obs-sim -n obs-sim --create-namespace`
-brings up the same six objects Phase 0 did. Hand-written from the
-manifests rather than `helm create`, so every line is explained. Parity
-was proven with `kubectl diff` of the rendered chart against the live
-Phase 0 objects before cutover: four of six showed no diff, and both
-differences were real findings (imagePullPolicy defaulting, absent
-replicas). manifests/ is superseded but kept as a learning artifact.
+Phase 1 complete (2026-07-16): the observability stack is in, all via Helm.
+kube-prometheus-stack, Loki (single-binary, filesystem), and Grafana Alloy
+(DaemonSet log collector, the current replacement for the EOL Promtail) are
+installed into a `monitoring` namespace. Values files live under
+`monitoring/`. A ServiceMonitor in the chart
+(`charts/obs-sim/templates/servicemonitor.yaml`) scrapes the app; Alloy ships
+pod logs to Loki; a sidecar-provisioned ConfigMap
+(`monitoring/loki-datasource.yaml`) registers Loki in Grafana. Verified end
+to end: metrics and logs correlate on one time axis in Grafana Explore (an
+`http_errors_total` rate spike lines up with the `500` log lines from
+`/simulate/error`). Debugging findings from this phase are in the README
+"Lessons" section (ServiceMonitor's three-selector chain, the `/health`
+denominator dilution, the Loki `deploymentMode` docs drift).
+
+Phase 1 chart (2026-07-15): charts/obs-sim written and deployed, hand-written
+from the manifests rather than `helm create`. Parity proven with `kubectl
+diff` against the live Phase 0 objects: four of six showed no diff, both
+differences were real findings (imagePullPolicy defaulting, absent replicas).
+manifests/ is superseded but kept as a learning artifact.
 
 Phase 0 complete (2026-07-09): raw manifests on k3d, app via Ingress at
 localhost:8080, HPA verified 2 -> 5 replicas under load (screenshots in
 docs/). Both images multi-arch on GHCR, built by CI in their own repos.
 
-Next: still Phase 1. kube-prometheus-stack via Helm with a ServiceMonitor
-scraping the app, then Loki (check whether Promtail or Alloy is current
-at time of work). Neither started.
+Next: Phase 2, GitOps with ArgoCD. Install ArgoCD, define Applications in
+`gitops/argocd/`, and make a commit-to-deployed flow with no manual helm or
+kubectl. Not started. Open cleanup seam: the kube-prometheus-stack install
+was a bare `helm install` with no values file; capturing it under
+`monitoring/` would make the whole stack reproducible.

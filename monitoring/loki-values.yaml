@@ -1,0 +1,63 @@
+# Loki Helm values: single-node, filesystem-backed, for a k3d learning cluster.
+# This is the deliberately-small footprint. A production Loki uses object
+# storage (S3/GCS) and splits read/write/backend into separate scalable
+# deployments. Here we run everything in one pod and store chunks on the
+# node's local disk. Good enough to learn LogQL; not what you'd run for real.
+
+deploymentMode: SingleBinary   # one binary, all Loki components in a single pod.
+                               # NOTE: the chart enum is "SingleBinary", NOT the
+                               # "Monolithic" the docs site shows. Verified with
+                               # `helm show values grafana/loki`.
+
+singleBinary:
+  replicas: 1
+
+loki:
+  commonConfig:
+    replication_factor: 1    # one copy; with a single node there is nowhere to replicate to
+  # Loki needs a schema that says "how do I lay out the index and where do
+  # chunks live". tsdb + filesystem = local disk, no S3 required.
+  schemaConfig:
+    configs:
+      - from: "2024-04-01"
+        store: tsdb
+        object_store: filesystem
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+  storage:
+    type: filesystem
+  # k3d cluster is tiny; silence the "no auth" multi-tenant nagging.
+  auth_enabled: false
+
+# The grafana/loki chart defaults to a scaled topology. Zero out every
+# component we are NOT using in Monolithic mode, or the chart schedules a
+# swarm of pods that will never fit on k3d.
+backend:        { replicas: 0 }
+read:           { replicas: 0 }
+write:          { replicas: 0 }
+ingester:       { replicas: 0 }
+querier:        { replicas: 0 }
+queryFrontend:  { replicas: 0 }
+queryScheduler: { replicas: 0 }
+distributor:    { replicas: 0 }
+compactor:      { replicas: 0 }
+indexGateway:   { replicas: 0 }
+bloomPlanner:   { replicas: 0 }
+bloomBuilder:   { replicas: 0 }
+bloomGateway:   { replicas: 0 }
+
+# The caches default to requesting several GiB of RAM each and will sit
+# Pending forever on a laptop cluster. Off for learning.
+chunksCache:    { enabled: false }
+resultsCache:   { enabled: false }
+
+# Extras we do not need: the canary that generates synthetic log traffic,
+# and the helm test hooks.
+lokiCanary:     { enabled: false }
+test:           { enabled: false }
+
+# Bundled MinIO (an S3 emulator) is only for object-storage mode. We use
+# filesystem, so keep it off.
+minio:          { enabled: false }

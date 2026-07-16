@@ -1,0 +1,79 @@
+# Grafana Alloy Helm values: the log collector, run as a DaemonSet.
+#
+# Alloy is Grafana's OpenTelemetry Collector distribution and the official
+# replacement for Promtail (Promtail hit end-of-life March 2026). One Alloy
+# pod runs per node; each reads that node's pod logs and pushes them to Loki.
+#
+# Config is written in Alloy's own language ("River"): a pipeline of
+# components wired together with `forward_to`. Read it top to bottom as
+# "discover pods -> relabel them into nice labels -> read their logs ->
+# add a static label -> write to Loki".
+
+controller:
+  type: daemonset          # one pod per node. This is the whole point.
+
+alloy:
+  configMap:
+    content: |-
+      // 1. DISCOVER: ask the Kubernetes API for pods, but only the ones
+      //    scheduled on THIS node (each DaemonSet pod handles its own node).
+      discovery.kubernetes "pod" {
+        role = "pod"
+        selectors {
+          role  = "pod"
+          field = "spec.nodeName=" + coalesce(sys.env("HOSTNAME"), constants.hostname)
+        }
+      }
+
+      // 2. RELABEL: raw discovery gives ugly __meta_* labels. Rewrite the
+      //    ones we care about into clean labels we can query in LogQL.
+      //    This is the exact same relabeling idea Prometheus uses for metrics.
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pod.targets
+
+        rule {                                        // -> {namespace="..."}
+          source_labels = ["__meta_kubernetes_namespace"]
+          action        = "replace"
+          target_label  = "namespace"
+        }
+        rule {                                        // -> {pod="..."}
+          source_labels = ["__meta_kubernetes_pod_name"]
+          action        = "replace"
+          target_label  = "pod"
+        }
+        rule {                                        // -> {container="..."}
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          action        = "replace"
+          target_label  = "container"
+        }
+        rule {                                        // -> {app="obs-sim"} from our plain `app` label
+          source_labels = ["__meta_kubernetes_pod_label_app"]
+          action        = "replace"
+          target_label  = "app"
+        }
+      }
+
+      // 3. READ: tail the logs of those discovered pods (via the K8s API,
+      //    so no hostPath mounts needed) and forward down the pipeline.
+      loki.source.kubernetes "pod_logs" {
+        targets    = discovery.relabel.pod_logs.output
+        forward_to = [loki.process.pod_logs.receiver]
+      }
+
+      // 4. PROCESS: stamp every line with a cluster label so that if you
+      //    later ship a second cluster's logs to the same Loki, you can
+      //    tell them apart.
+      loki.process "pod_logs" {
+        stage.static_labels {
+          values = { cluster = "obs-platform" }
+        }
+        forward_to = [loki.write.default.receiver]
+      }
+
+      // 5. WRITE: push to Loki's gateway (the URL the Loki chart printed
+      //    on install). /loki/api/v1/push is Loki's ingest endpoint.
+      loki.write "default" {
+        endpoint {
+          url = "http://loki-gateway.monitoring.svc.cluster.local/loki/api/v1/push"
+        }
+      }
