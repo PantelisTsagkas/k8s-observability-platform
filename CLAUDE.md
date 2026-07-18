@@ -135,6 +135,25 @@ aws eks list-clusters
 
 ## Current status
 
+Phase 2 complete (2026-07-18): GitOps with ArgoCD. ArgoCD is installed via a
+pinned `helm install` into an `argocd` namespace (values +Application under
+`gitops/argocd/`, bootstrap documented in `gitops/argocd/README.md`). The
+obs-sim chart is now reconciled from git, not `helm install`: the manual
+Phase 1 release was `helm uninstall`ed first so ArgoCD is the sole reconciler.
+The Application tracks `main` at `charts/obs-sim` with auto-sync (prune +
+selfHeal). Commit-to-deployed proven live: an `RPS 2 -> 3` values change merged
+via PR #5, ArgoCD polled git (~80s), updated the ConfigMap, and the
+`checksum/config` annotation rolled the loadgen pod - zero helm/kubectl against
+the cluster. Key live finding: the replicas trap did NOT bite. The chart's
+Phase 1 decision to omit `spec.replicas` under HPA also satisfies ArgoCD's
+built-in replicas normalizer, so no `ignoreDifferences` was needed (verified
+Synced with live at replicas 2, git specifying none, after a hard refresh).
+Cross-repo CI (observability-simulator builds image -> GHCR -> bumps sha- tag
+here) is the named Phase 2 follow-up, deferred by choice.
+
+Next: Phase 3, EKS with Terraform. Provision VPC + EKS + IRSA + ALB controller,
+deploy the identical charts, screenshot, then `terraform destroy` the same day.
+
 Phase 1 complete (2026-07-16): the observability stack is in, all via Helm.
 kube-prometheus-stack, Loki (single-binary, filesystem), and Grafana Alloy
 (DaemonSet log collector, the current replacement for the EOL Promtail) are
@@ -159,8 +178,7 @@ Phase 0 complete (2026-07-09): raw manifests on k3d, app via Ingress at
 localhost:8080, HPA verified 2 -> 5 replicas under load (screenshots in
 docs/). Both images multi-arch on GHCR, built by CI in their own repos.
 
-Next: Phase 2, GitOps with ArgoCD. Install ArgoCD, define Applications in
-`gitops/argocd/`, and make a commit-to-deployed flow with no manual helm or
-kubectl. Not started. Open cleanup seam: the kube-prometheus-stack install
-was a bare `helm install` with no values file; capturing it under
-`monitoring/` would make the whole stack reproducible.
+Open cleanup seam (still open): the kube-prometheus-stack install was a bare
+`helm install` with no values file; capturing it under `monitoring/` would make
+the whole stack reproducible. Not blocking, and deliberately left outside
+ArgoCD in Phase 2 (the phase DoD is the app, not the monitoring stack).
