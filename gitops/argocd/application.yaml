@@ -1,0 +1,34 @@
+# The obs-sim Application: ArgoCD's declarative record of "this chart, from this
+# git ref, belongs in this namespace". Applying it once is the last bootstrap
+# step; after that, git is the only way to change the app.
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: obs-sim
+  namespace: argocd            # Applications live in the argocd namespace by default
+  # Keep the app from being pruned if the Application itself is deleted mid-sync.
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/PantelisTsagkas/k8s-observability-platform.git
+    targetRevision: main       # ArgoCD reads git, not the working tree. Only what
+                               # is on main counts as "deployed".
+    path: charts/obs-sim       # the Phase 1 Helm chart; ArgoCD renders it itself
+
+  destination:
+    server: https://kubernetes.default.svc   # the cluster ArgoCD runs in
+    namespace: obs-sim
+
+  syncPolicy:
+    automated:
+      prune: true              # delete objects that leave git (true GitOps: git is
+                               # the whole truth, not just additive)
+      selfHeal: true           # revert manual kubectl edits back to git state
+    syncOptions:
+      - CreateNamespace=true   # so a fresh cluster works without a manual `kubectl
+                               # create ns obs-sim` first
