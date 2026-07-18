@@ -1,0 +1,12 @@
+# ArgoCD Helm values for local k3d.
+# Rule (same as the obs-sim chart): only override what differs from the chart's
+# defaults for THIS environment. ArgoCD's defaults are production-sane; we change
+# one thing.
+
+configs:
+  params:
+    # Run the API server without its own TLS. In a real cluster an ingress or
+    # load balancer terminates TLS in front of ArgoCD; locally we port-forward
+    # plain HTTP, and --insecure avoids the self-signed-cert redirect loop that
+    # otherwise breaks `kubectl port-forward` to the UI.
+    server.insecure: true
