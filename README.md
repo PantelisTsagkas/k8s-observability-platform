@@ -206,6 +206,18 @@ ConfigMap, and because the loadgen pod template carries a `checksum/config`
 hash, the pod rolled to the new profile on its own. A git commit reached a
 running pod with no `helm` or `kubectl`.
 
+ArgoCD's own view of the app makes the whole chain legible. The tree view shows
+what it manages, one Git commit fanning out to running pods, and it doubles as
+the rollout history:
+
+![ArgoCD resource tree for obs-sim, Healthy and Synced to the merge commit](docs/phase-2-argocd-tree.png)
+*The `obs-sim` Application, `Healthy` and `Synced to main (6593cee)` (a PR merge commit, i.e. the deploy record). The tree runs Application → Deployment → ReplicaSet → Pod, plus the HPA, ConfigMap, Service, ServiceMonitor and Ingress. The three `loadgen` ReplicaSets (`rev:1/2/3`) are the rollout history: each config change built a new ReplicaSet and drained the old one to zero, which is exactly what makes a change revertible.*
+
+The network view shows the same objects arranged by traffic instead of ownership:
+
+![ArgoCD network view: traffic from the cluster nodes through the Ingress and Service to the app pods](docs/phase-2-argocd-network.png)
+*The request path drawn live: traffic enters from outside, is load-balanced across the three k3d nodes (`172.21.0.x`), reaches the Traefik `Ingress`, the `Service`, and the app pods. The `loadgen` pod sits off to the side because it sends traffic rather than receiving it.*
+
 ## Lessons that cost debugging time (Phase 2)
 
 - ArgoCD reads git, not your working tree. `targetRevision: main` means a
