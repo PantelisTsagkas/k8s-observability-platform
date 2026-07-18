@@ -1,8 +1,10 @@
 # k8s-observability-platform
 
-**Status: ACTIVE** - Phase 1 done: Helm chart, kube-prometheus-stack, and
-Loki + Alloy are installed. Grafana shows app metrics and logs, correlated
-on one time axis. Phase 2 (ArgoCD) is next.
+**Status: ACTIVE** - Phase 2 done: ArgoCD watches this repo and reconciles
+the cluster to match `main`. The obs-sim chart is deployed by committing to
+git, not by running `helm`/`kubectl`. Phases 0-1 (manifests, Helm chart,
+kube-prometheus-stack, Loki + Alloy) are done; Grafana shows app metrics and
+logs correlated on one time axis. Phase 3 (EKS with Terraform) is next.
 
 Runs [observability-simulator](https://github.com/PantelisTsagkas/observability-simulator)
 (an instrumented FastAPI app) on Kubernetes: first locally on k3d with
@@ -20,13 +22,14 @@ multi-service traffic worth observing.
 |-------|------|--------|
 | 0 | Raw manifests on k3d: Deployment, Service, ConfigMap, Ingress, HPA | Done |
 | 1 | Helm chart + kube-prometheus-stack + Loki/Alloy | Done |
-| 2 | GitOps with ArgoCD, commit-to-deployed | Not started |
+| 2 | GitOps with ArgoCD, commit-to-deployed | Done |
 | 3 | EKS with Terraform, deploy the same charts, destroy same day | Not started |
 
 ## Architecture
 
-Unchanged by Phase 1: the chart renders down to exactly these objects.
-Only how they get applied changed.
+Unchanged by Phases 1-2: the chart renders down to exactly these objects.
+Only how they get applied changed - by hand in Phase 0, `helm install` in
+Phase 1, and a git commit reconciled by ArgoCD in Phase 2.
 
 ```
 localhost:8080
@@ -61,6 +64,12 @@ helm install obs-sim ./charts/obs-sim -n obs-sim --create-namespace
 # Wait for everything to come up
 kubectl get pods -n obs-sim -w
 ```
+
+This `helm install` is the Phase 1 path, shown here because it is the
+clearest way to see the chart applied directly. From Phase 2 on, the app is
+deployed by ArgoCD from git instead (see [GitOps with ArgoCD](#gitops-with-argocd-phase-2));
+the manual `helm upgrade --set` below still works for a quick local
+experiment, but the reconciled truth lives in `main`.
 
 Verify:
 
@@ -106,6 +115,7 @@ manifests/        # Phase 0: hand-written YAML, superseded by the chart,
                   # kept as the artifact it was derived from
 monitoring/       # Phase 1: values files for the observability stack
                   # (Loki, Alloy, the Grafana Loki datasource)
+gitops/argocd/    # Phase 2: ArgoCD bootstrap values + the obs-sim Application
 docs/             # screenshots, decisions, EKS writeup (Phase 3)
 ```
 
@@ -169,6 +179,52 @@ never exercise. It also asserts the invariant the chart exists to protect:
 with the HPA enabled, the obs-sim Deployment must not render a `replicas`
 field, or `helm upgrade` would reset the count and fight the autoscaler.
 That failure is silent in a cluster, so it is caught before merge instead.
+
+## GitOps with ArgoCD (Phase 2)
+
+ArgoCD runs in its own `argocd` namespace and continuously reconciles the
+cluster to match git. The obs-sim chart is no longer installed with `helm`;
+it is described by one Application manifest (`gitops/argocd/application.yaml`)
+that points ArgoCD at `charts/obs-sim` on `main`, with `prune` and `selfHeal`
+on. Deploying a change means merging to `main` - nothing is applied by hand.
+
+Bootstrap is the one honest exception: ArgoCD cannot install itself with
+ArgoCD, so the controller goes on with a single pinned `helm install`
+(`gitops/argocd/README.md`), the same reproducibility discipline the Phase 1
+stack now follows. After that, git is the only interface.
+
+Handing the app over from the Phase 1 `helm` release meant
+`helm uninstall obs-sim` first, so ArgoCD is the sole reconciler rather than
+a second controller fighting Helm over the same objects. ArgoCD then recreated
+every object - Deployment, Service, HPA, Ingress, ConfigMap, ServiceMonitor -
+and reported `Synced`/`Healthy`.
+
+The proof is a values change with nothing run against the cluster: bumping
+`loadgen.config.RPS` from 2 to 3 and merging to `main`. ArgoCD picked up the
+commit on its next git poll (~80s, no webhook on local k3d), updated the
+ConfigMap, and because the loadgen pod template carries a `checksum/config`
+hash, the pod rolled to the new profile on its own. A git commit reached a
+running pod with no `helm` or `kubectl`.
+
+## Lessons that cost debugging time (Phase 2)
+
+- ArgoCD reads git, not your working tree. `targetRevision: main` means a
+  change is "deployed" only once it is on `main`; a feature branch is
+  invisible to it. This is the first thing that looks broken for no reason -
+  the cluster simply reflects a ref you have not merged to yet.
+- The Phase 1 chart omits `spec.replicas` under HPA to stop `helm upgrade`
+  fighting the autoscaler. That same decision defends against a *different*
+  differ for a *different* reason: ArgoCD has a built-in normalizer that
+  ignores a Deployment's `replicas` when the manifest does not set it, so the
+  app stays `Synced` with live at `replicas: 2` and git specifying none - no
+  `ignoreDifferences` needed. One chart choice, two reconcilers, verified live
+  with a hard refresh rather than assumed.
+- Bringing an existing `helm` release under ArgoCD needs the release removed
+  first. Two controllers reconciling the same objects is drift by design;
+  `helm uninstall` (keeping the namespace) hands ownership over cleanly.
+- ArgoCD's default git poll is ~3 minutes, so a merge lands with a lag and no
+  visible cause. It is a poll, not a push: a webhook removes the delay, but on
+  a local cluster the lag is expected, not a stuck sync.
 
 ## Lessons that cost debugging time (Phase 0)
 
