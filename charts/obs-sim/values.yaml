@@ -32,7 +32,7 @@ loadgen:
   # Traffic profile. Becomes the ConfigMap, read as env vars at pod start.
   config:
     TARGET_URL: "http://obs-sim:8000"
-    RPS: "3"
+    RPS: "5"
     ERROR_RATE: "0.2"
     SLOW_RATE: "0.1"
     CONCURRENCY: "5"
