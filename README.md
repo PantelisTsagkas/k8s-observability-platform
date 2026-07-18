@@ -218,26 +218,6 @@ The network view shows the same objects arranged by traffic instead of ownership
 ![ArgoCD network view: traffic from the cluster nodes through the Ingress and Service to the app pods](docs/phase-2-argocd-network.png)
 *The request path drawn live: traffic enters from outside, is load-balanced across the three k3d nodes (`172.21.0.x`), reaches the Traefik `Ingress`, the `Service`, and the app pods. The `loadgen` pod sits off to the side because it sends traffic rather than receiving it.*
 
-## Lessons that cost debugging time (Phase 2)
-
-- ArgoCD reads git, not your working tree. `targetRevision: main` means a
-  change is "deployed" only once it is on `main`; a feature branch is
-  invisible to it. This is the first thing that looks broken for no reason -
-  the cluster simply reflects a ref you have not merged to yet.
-- The Phase 1 chart omits `spec.replicas` under HPA to stop `helm upgrade`
-  fighting the autoscaler. That same decision defends against a *different*
-  differ for a *different* reason: ArgoCD has a built-in normalizer that
-  ignores a Deployment's `replicas` when the manifest does not set it, so the
-  app stays `Synced` with live at `replicas: 2` and git specifying none - no
-  `ignoreDifferences` needed. One chart choice, two reconcilers, verified live
-  with a hard refresh rather than assumed.
-- Bringing an existing `helm` release under ArgoCD needs the release removed
-  first. Two controllers reconciling the same objects is drift by design;
-  `helm uninstall` (keeping the namespace) hands ownership over cleanly.
-- ArgoCD's default git poll is ~3 minutes, so a merge lands with a lag and no
-  visible cause. It is a poll, not a push: a webhook removes the delay, but on
-  a local cluster the lag is expected, not a stuck sync.
-
 ## Lessons that cost debugging time (Phase 0)
 
 - `runAsNonRoot: true` needs a *numeric* `USER` in the Dockerfile; the kubelet
@@ -302,3 +282,28 @@ The network view shows the same objects arranged by traffic instead of ownership
 - Loki indexes labels, not log bodies. Keep labels few and low-cardinality
   (never `request_id` or similar): each unique combination is a separate
   stream. Narrow by label first, then grep the body with `|=`.
+
+## Lessons that cost debugging time (Phase 2)
+
+- ArgoCD reads git, not your working tree. `targetRevision: main` means a
+  change is "deployed" only once it is on `main`; a feature branch is
+  invisible to it. This is the first thing that looks broken for no reason -
+  the cluster simply reflects a ref you have not merged to yet.
+- The Phase 1 chart omits `spec.replicas` under HPA to stop `helm upgrade`
+  fighting the autoscaler. That same decision defends against a *different*
+  differ for a *different* reason: ArgoCD has a built-in normalizer that
+  ignores a Deployment's `replicas` when the manifest does not set it, so the
+  app stays `Synced` with live at `replicas: 2` and git specifying none - no
+  `ignoreDifferences` needed. One chart choice, two reconcilers, verified live
+  with a hard refresh rather than assumed.
+- Bringing an existing `helm` release under ArgoCD needs the release removed
+  first. Two controllers reconciling the same objects is drift by design;
+  `helm uninstall` (keeping the namespace) hands ownership over cleanly.
+- ArgoCD's default git poll is ~3 minutes, so a merge lands with a lag and no
+  visible cause. It is a poll, not a push: a webhook removes the delay, but on
+  a local cluster the lag is expected, not a stuck sync.
+- A rollback is a commit, not a cluster command. `git revert` of the change
+  (reverting a *merge* needs `-m 1` to pick the mainline parent) makes git
+  describe the old state again, and ArgoCD reconciles back to it. Kubernetes
+  reuses the old ReplicaSet, whose pod-template hash still matches, so the
+  rollback is a scale-up of something already there, not a rebuild.
