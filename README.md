@@ -220,6 +220,42 @@ The network view shows the same objects arranged by traffic instead of ownership
 ![ArgoCD network view: traffic from the cluster nodes through the Ingress and Service to the app pods](docs/phase-2-argocd-network.png)
 *The request path drawn live: traffic enters from outside, is load-balanced across the three k3d nodes (`172.21.0.x`), reaches the Traefik `Ingress`, the `Service`, and the app pods. The `loadgen` pod sits off to the side because it sends traffic rather than receiving it.*
 
+## EKS with Terraform (Phase 3)
+
+The final phase moved the *identical* chart onto real AWS EKS, provisioned with
+Terraform (`terraform/eks/`, pinned community modules `vpc ~> 6.0` / `eks ~>
+21.0`). Terraform owns AWS only - a 2-AZ VPC with a single NAT gateway, an EKS
+1.33 control plane, one spot managed node group, and an IRSA role for the AWS
+Load Balancer Controller. metrics-server, the controller, and the app went on
+afterward with `helm`, so `terraform destroy` never had to authenticate to the
+cluster it was deleting. The whole thing was built, verified, screenshotted and
+destroyed the same day; total spend stayed under budget. Full story and the two
+failures that taught the most are in [docs/eks-writeup.md](docs/eks-writeup.md),
+teardown order in [docs/eks-runbook.md](docs/eks-runbook.md).
+
+The punchline is that only the infrastructure layer changed. The Deployment,
+Service, HPA, ConfigMap and loadgen were byte-for-byte the Phase 1 chart; one
+overlay (`charts/obs-sim/values-eks.yaml`) swapped the ingress class to `alb`,
+added three ALB annotations, and turned the ServiceMonitor off.
+
+The control plane came up as a managed EKS cluster, healthy and current:
+
+![EKS console showing the obs-platform cluster Active on Kubernetes 1.33 with zero health issues](docs/phase-3-eks-console.png)
+*The `obs-platform` cluster: `Active`, Kubernetes `1.33`, provider `EKS`, and `0` cluster-health / node-health issues. This is the AWS-managed control plane that replaced the local k3d one - the same Kubernetes API the earlier phases spoke to, now run by AWS.*
+
+Nodes joining `Ready` was the payoff for the phase's hardest bug: the CNI
+ordering deadlock (`vpc-cni` must install `before_compute = true`, or nodes
+never get networking and the node group never goes ACTIVE):
+
+![kubectl get nodes showing two Ready EKS nodes across two availability zones](docs/phase-3-nodes.png)
+*Two spot `t3.medium` nodes `Ready` in `eu-north-1`, one per AZ (`ip-10-0-1-110` and `ip-10-0-2-56`), on `v1.33.13-eks`. `Ready` rather than `NotReady` is the whole CNI-ordering lesson in one line: the `vpc-cni` addon installed before the nodes joined, so networking was there when they came up.*
+
+Traffic reached the app over an AWS-provisioned Application Load Balancer,
+created by the controller from the Ingress and its annotations:
+
+![EC2 console showing one Active internet-facing application load balancer for the app](docs/phase-3-alb-console.png)
+*The controller turned the `alb` Ingress into a real ALB: `k8s-obssim-obssim-2f9748f427`, `Active`, `application`, `Internet-facing`, across 2 AZs in `vpc-083f988c3a3eaf90f`. The app served `/health` 200 through this hostname from the open internet. That same VPC id is the one shown being destroyed at teardown - the ALB is deleted first (Terraform does not track it) so nothing is orphaned.*
+
 ## Lessons that cost debugging time (Phase 0)
 
 - `runAsNonRoot: true` needs a *numeric* `USER` in the Dockerfile; the kubelet
