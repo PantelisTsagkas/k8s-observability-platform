@@ -135,6 +135,27 @@ aws eks list-clusters
 
 ## Current status
 
+Phase 3 complete (2026-07-20): EKS with Terraform. The project is DONE. The
+identical obs-sim chart ran on real AWS EKS with only values changed
+(`charts/obs-sim/values-eks.yaml`: className alb + 3 ALB annotations,
+serviceMonitor off). Terraform (`terraform/eks/`, pinned community modules vpc
+`~> 6.0` / eks `~> 21.0`) owns AWS only: VPC (single NAT), EKS 1.33, spot node
+group, IRSA for the ALB controller. metrics-server + LB controller + app were
+`helm install`ed after, so `terraform destroy` never needed cluster auth (no
+hang). Verified live: app served `/health` 200 through an internet-facing ALB,
+HPA read `cpu: 11%/70%` (metrics-server working), then destroyed to confirmed
+zero the same day (state empty, VPC NotFound, no NAT/EIP/ALB stragglers).
+State was local by design (ephemeral cluster; conscious override of the S3
+rule). Screenshots in `docs/phase-3-*.png`, full story + findings in
+`docs/eks-writeup.md`, runbook in `docs/eks-runbook.md`. Three live findings:
+(1) addon ordering deadlock - vpc-cni/kube-proxy need `before_compute = true`
+or nodes stay NotReady (cni plugin not initialized) and the node group never
+goes ACTIVE, since the module sets bootstrap_self_managed_addons=false; (2) SSO
+tokens are short-lived and expired mid-apply (`aws sso login`, not `aws
+login`); (3) `className: alb` is not a drop-in for traefik - it needs
+scheme/target-type/healthcheck annotations. Named follow-up still deferred:
+cross-repo CI (observability-simulator -> GHCR -> sha- tag bump here).
+
 Phase 2 complete (2026-07-18): GitOps with ArgoCD. ArgoCD is installed via a
 pinned `helm install` into an `argocd` namespace (values +Application under
 `gitops/argocd/`, bootstrap documented in `gitops/argocd/README.md`). The
@@ -150,9 +171,6 @@ built-in replicas normalizer, so no `ignoreDifferences` was needed (verified
 Synced with live at replicas 2, git specifying none, after a hard refresh).
 Cross-repo CI (observability-simulator builds image -> GHCR -> bumps sha- tag
 here) is the named Phase 2 follow-up, deferred by choice.
-
-Next: Phase 3, EKS with Terraform. Provision VPC + EKS + IRSA + ALB controller,
-deploy the identical charts, screenshot, then `terraform destroy` the same day.
 
 Phase 1 complete (2026-07-16): the observability stack is in, all via Helm.
 kube-prometheus-stack, Loki (single-binary, filesystem), and Grafana Alloy

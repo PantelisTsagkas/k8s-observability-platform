@@ -1,10 +1,12 @@
 # k8s-observability-platform
 
-**Status: ACTIVE** - Phase 2 done: ArgoCD watches this repo and reconciles
-the cluster to match `main`. The obs-sim chart is deployed by committing to
-git, not by running `helm`/`kubectl`. Phases 0-1 (manifests, Helm chart,
-kube-prometheus-stack, Loki + Alloy) are done; Grafana shows app metrics and
-logs correlated on one time axis. Phase 3 (EKS with Terraform) is next.
+**Status: DONE** - All four phases complete. Phase 3 ran the identical Helm
+chart on real AWS EKS (VPC + EKS + IRSA + ALB controller, provisioned with
+Terraform), verified the app serving through an internet-facing ALB with a
+live HPA, then `terraform destroy`ed to zero the same day. Phases 0-2:
+hand-written manifests on k3d, a Helm chart with kube-prometheus-stack +
+Loki/Alloy, then GitOps with ArgoCD reconciling from `main`. See
+[docs/eks-writeup.md](docs/eks-writeup.md) for the Phase 3 story and findings.
 
 Runs [observability-simulator](https://github.com/PantelisTsagkas/observability-simulator)
 (an instrumented FastAPI app) on Kubernetes: first locally on k3d with
@@ -23,7 +25,7 @@ multi-service traffic worth observing.
 | 0 | Raw manifests on k3d: Deployment, Service, ConfigMap, Ingress, HPA | Done |
 | 1 | Helm chart + kube-prometheus-stack + Loki/Alloy | Done |
 | 2 | GitOps with ArgoCD, commit-to-deployed | Done |
-| 3 | EKS with Terraform, deploy the same charts, destroy same day | Not started |
+| 3 | EKS with Terraform, deploy the same charts, destroy same day | Done |
 
 ## Architecture
 

@@ -42,6 +42,8 @@ ingress:
   className: traefik         # k3d/k3s. Phase 3 on EKS flips this to alb.
   path: /
   pathType: Prefix
+  annotations: {}            # controller-specific. Empty for traefik.
+                             # EKS/ALB fills these via values-eks.yaml.
 
 hpa:
   enabled: true
