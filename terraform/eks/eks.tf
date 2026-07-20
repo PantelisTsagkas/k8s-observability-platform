@@ -42,10 +42,19 @@ module "eks" {
   # coredns is in-cluster DNS, kube-proxy wires up Service networking.
   # NOTE: metrics-server is NOT here - it is not an automatic EKS component, so
   # the HPA has no metrics until we install it in the runbook.
+  #
+  # ORDERING IS LOAD-BEARING. This module sets bootstrap_self_managed_addons =
+  # false, so EKS does NOT ship a CNI on its own - Terraform is the only source.
+  # vpc-cni (the CNI) and kube-proxy MUST be installed BEFORE the node group, or
+  # nodes come up with no pod network, stay NotReady, and the node group never
+  # reaches ACTIVE (a deadlock: the group waits on nodes, the nodes wait on a
+  # CNI that is scheduled after the group). before_compute = true puts them in
+  # the pre-node-group bucket. coredns needs a Ready node to schedule on, so it
+  # correctly stays in the default (after-compute) bucket.
   addons = {
+    vpc-cni    = { before_compute = true }
+    kube-proxy = { before_compute = true }
     coredns    = {}
-    kube-proxy = {}
-    vpc-cni    = {}
   }
 
   # One managed node group on SPOT. Spot is ~70% cheaper and totally fine for a
