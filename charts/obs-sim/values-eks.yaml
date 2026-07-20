@@ -1,0 +1,30 @@
+# values-eks.yaml: the EVERYTHING-that-differs-on-EKS overlay.
+#
+# Phase 3's whole thesis is "same chart, only the infrastructure changed." This
+# file is the honest accounting of what "only" means: a handful of values, no
+# template edits. Apply with:
+#   helm install obs-sim charts/obs-sim -f charts/obs-sim/values-eks.yaml ...
+#
+# Everything not mentioned here inherits from values.yaml unchanged.
+
+# No Prometheus operator on the EKS cluster (app-only scope), so the
+# ServiceMonitor CRD does not exist. Leaving this on would fail the apply with
+# "no matches for kind ServiceMonitor".
+serviceMonitor:
+  enabled: false
+
+ingress:
+  # Hand the ingress to the AWS Load Balancer Controller instead of traefik.
+  className: alb
+
+  # ALB behaviour is 100% annotation-driven (traefik needed none). These three
+  # are the difference between a working public URL and a silent failure:
+  annotations:
+    # Default is "internal" -> unreachable from your laptop. Force public.
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    # Default "instance" mode needs a NodePort Service; ours is ClusterIP.
+    # "ip" mode registers pod IPs directly and works with ClusterIP.
+    alb.ingress.kubernetes.io/target-type: ip
+    # ALB's default target health check is "/", which the app may not 200 on.
+    # Point it at the real health endpoint or targets stay unhealthy -> 502.
+    alb.ingress.kubernetes.io/healthcheck-path: /health

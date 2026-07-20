@@ -1,0 +1,9 @@
+# Never commit local Terraform state (it can contain secrets: certs, tokens)
+# or the provider cache. State here is ephemeral by design (see versions.tf).
+# Note: .terraform.lock.hcl is intentionally NOT ignored - it pins provider
+# hashes so `terraform init` is reproducible. That file gets committed.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log

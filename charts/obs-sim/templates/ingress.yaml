@@ -8,6 +8,14 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: obs-sim
+  {{- with .Values.ingress.annotations }}
+  # Controller-specific config. Traefik (k3d) needs none, so this is empty by
+  # default and renders nothing. The ALB controller (EKS) is driven entirely by
+  # annotations - scheme, target-type, health-check path - supplied via
+  # values-eks.yaml. Passthrough keeps the chart controller-agnostic.
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   rules:
